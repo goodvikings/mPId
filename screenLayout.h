@@ -41,7 +41,7 @@ private:
 	unsigned int titlePos;
 	unsigned int artistPos;
 	unsigned int albumYearPos;
-	
+
 	pthread_mutex_t* lock;
 };
 
