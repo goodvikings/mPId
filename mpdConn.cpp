@@ -35,6 +35,8 @@ mpdConn::mpdConn(const char* address, const unsigned int port)
 		connected = true;
 	}
 
+	lastPress = 0;
+
 	pthread_mutex_unlock(lock);
 }
 
@@ -62,7 +64,7 @@ bool mpdConn::isConnected()
 bool mpdConn::updateTags()
 {
 	pthread_mutex_lock(lock);
-	
+
 	bool retVal = false;
 
 	status = mpd_run_status(conn);
@@ -73,17 +75,17 @@ bool mpdConn::updateTags()
 		connected = false;
 		retVal = false;
 	} else if (song != NULL)
-	{	// copy across info
-		strncpy(title, mpd_song_get_tag(song, MPD_TAG_TITLE, 0), MPD_CONN_STRING_LEN);
-		strncpy(artist, mpd_song_get_tag(song, MPD_TAG_ARTIST, 0), MPD_CONN_STRING_LEN);
-		strncpy(album, mpd_song_get_tag(song, MPD_TAG_ALBUM, 0), MPD_CONN_STRING_LEN);
-		strncpy(year, mpd_song_get_tag(song, MPD_TAG_DATE, 0), MPD_CONN_STRING_LEN);
+	{ // copy across info
+		strncpy(title, mpd_song_get_tag(song, MPD_TAG_TITLE, 0) == NULL ? "" : mpd_song_get_tag(song, MPD_TAG_TITLE, 0), MPD_CONN_STRING_LEN);
+		strncpy(artist, mpd_song_get_tag(song, MPD_TAG_ARTIST, 0) == NULL ? "" : mpd_song_get_tag(song, MPD_TAG_ARTIST, 0), MPD_CONN_STRING_LEN);
+		strncpy(album, mpd_song_get_tag(song, MPD_TAG_ALBUM, 0) == NULL ? "" : mpd_song_get_tag(song, MPD_TAG_ALBUM, 0), MPD_CONN_STRING_LEN);
+		strncpy(year, mpd_song_get_tag(song, MPD_TAG_DATE, 0) == NULL ? "" : mpd_song_get_tag(song, MPD_TAG_DATE, 0), MPD_CONN_STRING_LEN);
 
 		elapsedTime = mpd_status_get_elapsed_time(status);
 		duration = mpd_status_get_total_time(status);
 		id = mpd_status_get_song_id(status);
 	}
-	
+
 	state = mpd_status_get_state(status);
 	retVal = true;
 
@@ -95,30 +97,46 @@ bool mpdConn::updateTags()
 	{
 		mpd_status_free(status);
 	}
-	
+
 	pthread_mutex_unlock(lock);
-	
+
 	return retVal;
 }
 
 void mpdConn::getTitle(char* buff, unsigned int buffLen) const
 {
+	pthread_mutex_lock(lock);
+
 	strncpy(buff, title, buffLen > MPD_CONN_STRING_LEN ? MPD_CONN_STRING_LEN : buffLen);
+
+	pthread_mutex_unlock(lock);
 }
 
 void mpdConn::getArtist(char* buff, unsigned int buffLen) const
 {
+	pthread_mutex_lock(lock);
+
 	strncpy(buff, artist, buffLen > MPD_CONN_STRING_LEN ? MPD_CONN_STRING_LEN : buffLen);
+
+	pthread_mutex_unlock(lock);
 }
 
 void mpdConn::getAlbum(char* buff, unsigned int buffLen) const
 {
+	pthread_mutex_lock(lock);
+
 	strncpy(buff, album, buffLen > MPD_CONN_STRING_LEN ? MPD_CONN_STRING_LEN : buffLen);
+
+	pthread_mutex_unlock(lock);
 }
 
 void mpdConn::getYear(char* buff, unsigned int buffLen) const
 {
+	pthread_mutex_lock(lock);
+
 	strncpy(buff, year, buffLen > MPD_CONN_STRING_LEN ? MPD_CONN_STRING_LEN : buffLen);
+
+	pthread_mutex_unlock(lock);
 }
 
 unsigned int mpdConn::getElapsedTime() const
@@ -139,4 +157,51 @@ int mpdConn::getID() const
 mpd_state mpdConn::getState() const
 {
 	return state;
+}
+
+void mpdConn::toggle()
+{
+	pthread_mutex_lock(lock);
+
+	status = mpd_run_status(conn);
+	state = mpd_status_get_state(status);
+
+	if (state == MPD_STATE_STOP)
+	{
+		mpd_run_play(conn);
+	} else
+	{
+		mpd_run_toggle_pause(conn);
+	}
+
+	mpd_status_free(status);
+
+	pthread_mutex_unlock(lock);
+}
+
+void mpdConn::stop()
+{
+	pthread_mutex_lock(lock);
+
+	mpd_run_stop(conn);
+
+	pthread_mutex_unlock(lock);
+}
+
+void mpdConn::prev()
+{
+	pthread_mutex_lock(lock);
+
+	mpd_run_previous(conn);
+
+	pthread_mutex_unlock(lock);
+}
+
+void mpdConn::next()
+{
+	pthread_mutex_lock(lock);
+
+	mpd_run_next(conn);
+
+	pthread_mutex_unlock(lock);
 }
