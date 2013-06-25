@@ -11,9 +11,6 @@
 #include <string.h>
 #include "screenLayout.h"
 
-#include <iostream>
-using namespace std;
-
 screenLayout::screenLayout()
 {
 	lock = new pthread_mutex_t;
@@ -93,20 +90,27 @@ void screenLayout::setContents(const char* title, const char* artist, const char
 	pad(&titleStr, maxLen);
 	pad(&artistStr, maxLen);
 	pad(&albumYearStr, maxLen);
-	
+
+
+	/* setTime needs it's own locking, so we need to unlock before calling it */
+	pthread_mutex_lock(lock);
+
 	setTime(elapsed, duration);
-	
+
+	/* and then unlock */
+	pthread_mutex_unlock(lock);
+
 	titlePos = 0;
 	artistPos = 0;
 	albumYearPos = 0;
 
 	pthread_mutex_unlock(lock);
-
-
 }
 
 void screenLayout::setTime(const char* elapsed, const char* duration)
 {
+	pthread_mutex_lock(lock);
+
 	timeStr.assign(elapsed);
 	timeStr += "/";
 	timeStr += duration;
@@ -116,6 +120,8 @@ void screenLayout::setTime(const char* elapsed, const char* duration)
 	{
 		timeStr = "                    ";
 	}
+
+	pthread_mutex_unlock(lock);
 }
 
 /*
@@ -123,9 +129,9 @@ void screenLayout::setTime(const char* elapsed, const char* duration)
  */
 void screenLayout::scrollScreen()
 {
+	pthread_mutex_lock(lock);
 
 	clearScreen();
-
 
 	for (unsigned int j = 0; j < COLS; j++)
 	{
@@ -139,6 +145,7 @@ void screenLayout::scrollScreen()
 	artistPos = artistStr.length() > COLS ? (artistPos + 1) % artistStr.length() : 0;
 	albumYearPos = albumYearStr.length() > COLS ? (albumYearPos + 1) % albumYearStr.length() : 0;
 
+	pthread_mutex_unlock(lock);
 }
 
 /*
@@ -146,6 +153,8 @@ void screenLayout::scrollScreen()
  */
 void screenLayout::getContents(char** data) const
 {
+	pthread_mutex_lock(lock);
+
 	for (int i = 0; i < ROWS; i++)
 	{
 		for (int j = 0; j < COLS; j++)
@@ -153,14 +162,20 @@ void screenLayout::getContents(char** data) const
 			data[i][j] = screen[i][j];
 		}
 	}
+
+	pthread_mutex_unlock(lock);
 }
 
 void screenLayout::clearScreen()
 {
+	pthread_mutex_lock(lock);
+
 	for (int i = 0; i < ROWS; i++)
 	{
 		memset(screen[i], 0, COLS);
 	}
+
+	pthread_mutex_unlock(lock);
 }
 
 void screenLayout::pad(std::string* str, unsigned long len)
