@@ -13,11 +13,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <mpd/client.h>
+#include <stdio.h>
 #include "mpdConn.h"
 #include "screenLayout.h"
-
-#include <iostream>
-using namespace std;
+#include "interrupts.h"
 
 #define ROWS 4
 #define COLS 20
@@ -29,7 +28,10 @@ using namespace std;
 #define DATA2 2
 #define DATA3 3
 
+#define REFRESH 200
+
 int lcdHandle;
+mpdConn mc("localhost", 6600);
 
 /*
  * Initialize the wiring pi stuff, write welcom message to the screen
@@ -41,7 +43,7 @@ bool initWiringPi()
 		return false;
 	}
 
-        lcdHandle = lcdInit(ROWS, COLS, BITS, RS, STRB, DATA0, DATA1, DATA2, DATA3, 0, 0, 0, 0);
+	lcdHandle = lcdInit(ROWS, COLS, BITS, RS, STRB, DATA0, DATA1, DATA2, DATA3, 0, 0, 0, 0);
 
 	if (lcdHandle < 0)
 	{
@@ -64,9 +66,9 @@ void print(const char** data)
 		{
 			lcdPosition(lcdHandle, j, i);
 			lcdPutchar(lcdHandle, data[i][j]);
-//			cout << data[i][j];
+			//			cout << data[i][j];
 		}
-//		cout << endl;
+		//		cout << endl;
 	}
 }
 
@@ -74,12 +76,13 @@ int main()
 {
 	if (!initWiringPi())
 	{
-		cerr << "Failed to intialize wiringPi and lcdInit" << endl;
+		fprintf(stderr, "Failed to intialize wiringPi and lcdInit");
 		return false;
 	}
 
-        screenLayout screen;
-        mpdConn mc("localhost", 6600);
+	screenLayout screen;
+
+	initInterrupts();
 
 	char ** data = new char*[ROWS];
 	for (int i = 0; i < ROWS; i++)
@@ -88,103 +91,95 @@ int main()
 	}
 
 	char title[MPD_CONN_STRING_LEN] = "";
-        char artist[MPD_CONN_STRING_LEN] = "";
-        char album[MPD_CONN_STRING_LEN] = "";
-        char year[MPD_CONN_STRING_LEN] = "";
-        char tmp[TIMELEN] = "";
-        char elapsed[TIMELEN] = "";
-        char duration[TIMELEN] = "";
+	char artist[MPD_CONN_STRING_LEN] = "";
+	char album[MPD_CONN_STRING_LEN] = "";
+	char year[MPD_CONN_STRING_LEN] = "";
+	char tmp[TIMELEN] = "";
+	char elapsed[TIMELEN] = "";
+	char duration[TIMELEN] = "";
 
 	int songID = 0;
-        int oldSongID = -1;
+	int oldSongID = -1;
 
 	bool state = true;
 	mpd_state oldState = MPD_STATE_UNKNOWN;
 
 	if (!mc.isConnected())
 	{
-		cerr << "Connection to MPD failed" << endl;
+		fprintf(stderr, "Connection to MPD failed");
 		return false;
 	}
 
+	// First delay to show "Ramo's Jukebox"
+	delay(2000);
+
 	while (state)
 	{
-		sleep(1);
+		delay(REFRESH);
 
 		if (!mc.updateTags())
 		{
-			cerr << "Failed to update tags" << endl;
+			fprintf(stderr, "Failed to update tags");
 			return false;
 		}
 
 		songID = mc.getID();
 
-                if (mc.getState() == MPD_STATE_PLAY || mc.getState() == MPD_STATE_PAUSE)
-                {
-                        mc.getTitle(title, MPD_CONN_STRING_LEN);
-                        mc.getAlbum(album, MPD_CONN_STRING_LEN);
-                        mc.getArtist(artist, MPD_CONN_STRING_LEN);
-                        mc.getYear(year, MPD_CONN_STRING_LEN);
-                }
+		if (mc.getState() == MPD_STATE_PLAY || mc.getState() == MPD_STATE_PAUSE)
+		{
+			mc.getTitle(title, MPD_CONN_STRING_LEN);
+			mc.getAlbum(album, MPD_CONN_STRING_LEN);
+			mc.getArtist(artist, MPD_CONN_STRING_LEN);
+			mc.getYear(year, MPD_CONN_STRING_LEN);
+		}
 
-                if (mc.getState() == MPD_STATE_STOP || songID == -1)
-                {
-                        strcpy(title, "Stopped");
+		if (mc.getState() == MPD_STATE_STOP || songID == -1)
+		{
+			strcpy(title, "Stopped");
 			strcpy(album, "");
 			strcpy(artist, "");
 			strcpy(year, "");
-                } else if (mc.getState() == MPD_STATE_UNKNOWN)
-                {
-                        strcpy(title, "Error - MPD STATE UNKNOWN");
+		} else if (mc.getState() == MPD_STATE_UNKNOWN)
+		{
+			strcpy(title, "Error - MPD STATE UNKNOWN");
 			strcpy(album, "");
 			strcpy(artist, "");
 			strcpy(year, "");
 			state = false;
-                }
+		}
 
 		elapsed[0] = 0;
-                duration[0] = 0;
+		duration[0] = 0;
 
-                sprintf(tmp, "%0d", mc.getElapsedTime() / 60);
-                strcat(elapsed, tmp);
-                strcat(elapsed, ":");
-                sprintf(tmp, "%02d", mc.getElapsedTime() % 60);
-                strcat(elapsed, tmp);
+		sprintf(tmp, "%0d", mc.getElapsedTime() / 60);
+		strcat(elapsed, tmp);
+		strcat(elapsed, ":");
+		sprintf(tmp, "%02d", mc.getElapsedTime() % 60);
+		strcat(elapsed, tmp);
 
-                sprintf(tmp, "%0d", mc.getDuration() / 60);
-                strcat(duration, tmp);
-                strcat(duration, ":");
-                sprintf(tmp, "%02d", mc.getDuration() % 60);
-                strcat(duration, tmp);
+		sprintf(tmp, "%0d", mc.getDuration() / 60);
+		strcat(duration, tmp);
+		strcat(duration, ":");
+		sprintf(tmp, "%02d", mc.getDuration() % 60);
+		strcat(duration, tmp);
 
 		if (songID != oldSongID || mc.getState() != oldState)
-                {
-                        screen.setContents(title, artist, album, year, elapsed, duration);
-                        oldSongID = songID;
-                } else
-                {
-                        screen.setTime(elapsed, duration);
-                }
+		{
+			screen.setContents(title, artist, album, year, elapsed, duration);
+			oldSongID = songID;
+		} else
+		{
+			screen.setTime(elapsed, duration);
+		}
 		if (mc.getState() == MPD_STATE_STOP || mc.getState() == MPD_STATE_UNKNOWN)
 		{
 			screen.setTime("0:00", "0:00");
-		} else
-		{
-			screen.setScreen()
 		}
 
 		oldState = mc.getState();
 
-                screen.scrollScreen();
+		screen.scrollScreen();
 		screen.getContents(data);
-                print((const char**)data);
+		print((const char**) data);
 	}
-
-
-
-
-
-
-
-
 }
