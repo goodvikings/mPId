@@ -33,6 +33,11 @@ public:
 	unsigned int getDuration() const;
 	int getID() const;
 	mpd_state getState() const;
+
+	void toggle();
+	void stop();
+	void prev();
+	void next();
 private:
 	// Data held
 	char* title;
@@ -52,7 +57,8 @@ private:
 
 	// thread stuff
 	pthread_mutex_t* lock;
+
+	unsigned int lastPress;
 };
 
 #endif	/* MPDCONN_H */
-
